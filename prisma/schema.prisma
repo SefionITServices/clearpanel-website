@@ -1,0 +1,66 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Admin Users ───────────────────────────────────────────────
+model AdminUser {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Customers (synced from Stripe webhook) ────────────────────
+model Customer {
+  id               String         @id @default(cuid())
+  stripeCustomerId String         @unique
+  email            String         @unique
+  name             String?
+  notes            String?
+  tags             String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  subscriptions    Subscription[]
+}
+
+// ─── Subscriptions (synced from Stripe webhook) ────────────────
+model Subscription {
+  id                   String    @id @default(cuid())
+  stripeSubscriptionId String    @unique
+  customerId           String
+  customer             Customer  @relation(fields: [customerId], references: [id])
+  stripePriceId        String
+  plan                 String
+  status               String
+  amount               Int
+  currency             String    @default("usd")
+  interval             String    @default("month")
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean   @default(false)
+  canceledAt           DateTime?
+  trialEnd             DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+// ─── Webhook Events (idempotency log) ──────────────────────────
+model WebhookEvent {
+  id        String   @id @default(cuid())
+  stripeId  String   @unique
+  type      String
+  processed Boolean  @default(false)
+  error     String?
+  createdAt DateTime @default(now())
+}

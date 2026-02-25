@@ -1,0 +1,86 @@
+# Full HTTPS config (rename this to app.conf after running setup-ssl.sh)
+
+# Redirect HTTP → HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name DOMAIN_PLACEHOLDER www.DOMAIN_PLACEHOLDER;
+
+    # ACME challenge (for cert renewal)
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# Main HTTPS server
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name DOMAIN_PLACEHOLDER www.DOMAIN_PLACEHOLDER;
+
+    # SSL Certificates (Let's Encrypt)
+    ssl_certificate     /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/privkey.pem;
+
+    # SSL settings
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_dhparam         /etc/nginx/dhparam.pem;
+
+    # HSTS (6 months)
+    add_header Strict-Transport-Security "max-age=15768000; includeSubDomains" always;
+
+    # Security
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com; frame-src https://js.stripe.com;" always;
+
+    # Rate limit hitting admin login endpoint
+    location /api/admin/auth/login {
+        limit_req zone=login burst=3 nodelay;
+        proxy_pass         http://app:3000;
+        proxy_http_version 1.1;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+
+    # Rate limit Stripe webhook
+    location /api/stripe/ {
+        limit_req zone=api burst=30 nodelay;
+        proxy_pass         http://app:3000;
+        proxy_http_version 1.1;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+
+    # Static assets — aggressive caching
+    location /_next/static/ {
+        proxy_pass         http://app:3000;
+        proxy_set_header   Host $host;
+        add_header         Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # Main proxy
+    location / {
+        proxy_pass         http://app:3000;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection 'upgrade';
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 60s;
+    }
+}

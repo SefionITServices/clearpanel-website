@@ -1,0 +1,28 @@
+node_modules
+
+# Environment variables — never commit real secrets
+.env
+.env.local
+.env.production
+.env*.local
+
+# Generated Prisma
+/src/generated/prisma
+
+# Database files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Build output
+.next/
+out/
+
+# Backups (keep the directory, ignore content)
+backups/*
+!backups/.gitkeep
+
+# Misc
+.DS_Store
+*.log
